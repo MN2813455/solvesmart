@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   analyzeProblemStatement, 
@@ -30,7 +31,7 @@ const ProblemAssistant: React.FC = () => {
   
   // Structure State
   const [issueTree, setIssueTree] = useState<IssueTreeResult | null>(null);
-  const [problemType, setProblemType] = useState<ProblemType>('structured');
+  const [problemType, setProblemType] = useState<ProblemType>('formulaic');
   
   // Prioritize State
   const [prioritization, setPrioritization] = useState<PrioritizationResult | null>(null);
@@ -337,21 +338,21 @@ const ProblemAssistant: React.FC = () => {
                        </div>
 
                        <div>
-                         <label className="block text-sm font-medium text-slate-700 mb-2">Problem Complexity</label>
+                         <label className="block text-sm font-medium text-slate-700 mb-2">Logic Architecture</label>
                          <div className="grid grid-cols-2 gap-3 mb-4">
                            <button
-                             onClick={() => setProblemType('structured')}
-                             className={`p-3 rounded-lg border text-sm text-left transition-all ${problemType === 'structured' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                             onClick={() => setProblemType('formulaic')}
+                             className={`p-3 rounded-lg border text-sm text-left transition-all ${problemType === 'formulaic' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                            >
-                             <div className="font-bold mb-1">Structured</div>
-                             <div className={`text-xs ${problemType === 'structured' ? 'text-indigo-200' : 'text-slate-400'}`}>e.g. Profit (Formulaic)</div>
+                             <div className="font-bold mb-1">Metric-Led (Formulaic)</div>
+                             <div className={`text-xs ${problemType === 'formulaic' ? 'text-indigo-200' : 'text-slate-400'}`}>Equation based (e.g. Profit)</div>
                            </button>
                            <button
-                             onClick={() => setProblemType('nebulous')}
-                             className={`p-3 rounded-lg border text-sm text-left transition-all ${problemType === 'nebulous' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                             onClick={() => setProblemType('thematic')}
+                             className={`p-3 rounded-lg border text-sm text-left transition-all ${problemType === 'thematic' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                            >
-                             <div className="font-bold mb-1">Nebulous</div>
-                             <div className={`text-xs ${problemType === 'nebulous' ? 'text-indigo-200' : 'text-slate-400'}`}>e.g. Culture (Thematic)</div>
+                             <div className="font-bold mb-1">Strategy-Led (Thematic)</div>
+                             <div className={`text-xs ${problemType === 'thematic' ? 'text-indigo-200' : 'text-slate-400'}`}>Conceptual pillars (e.g. Brand)</div>
                            </button>
                          </div>
 
@@ -373,12 +374,12 @@ const ProblemAssistant: React.FC = () => {
            <div className="h-full flex flex-col">
               <div className="flex justify-between items-end mb-6">
                  <div>
-                    <h3 className="text-xl font-bold text-slate-900">Step 2: Structure the Problem</h3>
+                    <h3 className="text-xl font-bold text-slate-900">Step 2: Deconstruct Problem</h3>
                     <p className="text-sm text-slate-500">Break it down using an Issue Tree.</p>
                  </div>
                  <div className="flex items-center gap-2 px-3 py-1 bg-teal-50 text-teal-700 rounded-full border border-teal-200 text-xs font-bold">
                     <Icon name="CheckCircle2" size={14} />
-                    MECE Check Passed
+                    Logic Cleanse Passed
                  </div>
               </div>
 
@@ -390,7 +391,7 @@ const ProblemAssistant: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
                 <div className="p-4 bg-slate-100 rounded-xl border border-slate-200">
-                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Logic Check (MECE)</h4>
+                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Exhaustive Logic Check</h4>
                    <p className="text-sm text-slate-600">{issueTree.meceExplanation}</p>
                 </div>
                 
@@ -398,7 +399,7 @@ const ProblemAssistant: React.FC = () => {
                    <div className="mr-4">
                      <h4 className="text-xs font-bold text-indigo-500 uppercase tracking-wider mb-1">Iterate</h4>
                      <p className="text-sm text-indigo-900">
-                       Is this structure useful? If not, try regenerating it.
+                       Is this architecture useful? If not, try regenerating it.
                      </p>
                    </div>
                    <button 

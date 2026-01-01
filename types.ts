@@ -1,3 +1,4 @@
+
 export interface SmartAnalysis {
   isSpecific: boolean;
   isMeasurable: boolean;
@@ -12,11 +13,12 @@ export interface SmartAnalysis {
   identifiedBiases: string[];
 }
 
-export type ProblemType = 'structured' | 'nebulous';
+export type ProblemType = 'formulaic' | 'thematic';
 
 export interface IssueNode {
   id: string;
   label: string;
+  explanation?: string; // New field for context
   type: 'root' | 'category' | 'issue';
   children?: IssueNode[];
 }
@@ -66,6 +68,7 @@ export interface ChatAction {
   label: string;
   value: string;
   style?: 'primary' | 'secondary';
+  tooltip?: string;
 }
 
 export interface ChatMessage {

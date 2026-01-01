@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { 
   Target, 
@@ -22,7 +23,9 @@ import {
   Printer,
   MessageSquare,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  Activity,
+  Mic
 } from 'lucide-react';
 
 export const Icons = {
@@ -48,7 +51,9 @@ export const Icons = {
   Printer,
   MessageSquare,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  Activity,
+  Mic
 };
 
 interface IconProps {
