@@ -3,29 +3,43 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { SmartAnalysis, IssueTreeResult, PrioritizationResult, ProblemType, WorkplanItem, SynthesisResult } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-const modelId = "gemini-3-flash-preview";
 
-const CONSULTANT_PERSONA = "You are a direct, clear-thinking strategic advisor. Your goal is to simplify complexity. You always use the Minto Pyramid Principle: start with the most important answer first, then support it with clear, non-overlapping logical pillars. Avoid academic jargon. Speak like a senior partner explaining a clear path to a client.";
+// Using Pro for high-stakes reasoning, Flash for initial definition
+const MODEL_PRO = "gemini-3-pro-preview";
+const MODEL_FLASH = "gemini-3-flash-preview";
+
+const CONSULTANT_PERSONA = "You are a top-tier Strategic Partner. Your signature style is the Minto Pyramid Principle: Answer First. You prioritize clarity over complexity. Every time you use technical terms (like NPV, ROI, churn, etc.), you MUST provide a plain-English definition within the explanation.";
+
+/**
+ * Generic retry wrapper for production-grade reliability
+ */
+async function callWithRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (retries > 0) {
+      console.warn(`API call failed, retrying... (${retries} left)`);
+      await new Promise(r => setTimeout(r, 1000));
+      return callWithRetry(fn, retries - 1);
+    }
+    throw e;
+  }
+}
 
 export const analyzeProblemStatement = async (problemText: string, context: string): Promise<SmartAnalysis> => {
   const systemInstruction = `
     ${CONSULTANT_PERSONA}
-    Review the user's challenge and refine it into a clear, professional objective.
-    
-    1. Evaluate if it's Specific, Measurable, and Time-bound.
-    2. Rewrite it to be an 'Answer-First' objective statement.
-    3. Identify who needs to be involved.
-    4. Ask 3 direct questions that cut to the heart of the challenge.
-    
-    Context: ${context || 'General business context'}
+    Analyze the objective. Ensure it is precise. If it lacks a timeframe or metric, suggest one.
+    Lead with an 'Answer-First' refined statement.
+    Context: ${context || 'General strategic context'}
   `;
 
-  try {
+  return callWithRetry(async () => {
     const response = await ai.models.generateContent({
-      model: modelId,
-      contents: `Analyze this challenge: "${problemText}"`,
+      model: MODEL_FLASH,
+      contents: `Analyze: "${problemText}"`,
       config: {
-        systemInstruction: systemInstruction,
+        systemInstruction,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -42,60 +56,33 @@ export const analyzeProblemStatement = async (problemText: string, context: stri
             challengerQuestions: { type: Type.ARRAY, items: { type: Type.STRING } },
             identifiedBiases: { type: Type.ARRAY, items: { type: Type.STRING } }
           },
-          required: [
-            "isSpecific", "isMeasurable", "isActionable", "isRelevant", "isTimeBound", 
-            "feedback", "improvedStatement", "potentialStakeholders", "recommendedApproach",
-            "challengerQuestions", "identifiedBiases"
-          ]
+          required: ["isSpecific", "isMeasurable", "isActionable", "isRelevant", "isTimeBound", "feedback", "improvedStatement", "challengerQuestions"]
         }
       }
     });
-
-    if (response.text) {
-      return JSON.parse(response.text) as SmartAnalysis;
-    }
-    throw new Error("No response text generated");
-  } catch (error) {
-    console.error("Analysis Failed:", error);
-    throw error;
-  }
+    return JSON.parse(response.text);
+  });
 };
 
 export const generateIssueTree = async (problemStatement: string, problemType: ProblemType): Promise<IssueTreeResult> => {
-  let instructionContext = "";
-  
-  if (problemType === 'formulaic') {
-    instructionContext = `
-      This is a data-driven or numerical problem. Use a 'Drivers' approach. 
-      Root: The core result (e.g., Profit).
-      Level 1: The major drivers (e.g., Revenue vs. Costs).
-      Level 2: The specific components.
-      IMPORTANT: For every node, provide a brief 'explanation' field (1 sentence) that explains WHY this factor matters or what it means in plain English (e.g., explain NPV if you use it).
-    `;
-  } else {
-    instructionContext = `
-      This is a strategic or organizational problem. Use a 'Thematic' approach.
-      Root: The core strategic goal.
-      Level 1: The 3-4 key pillars of success.
-      Level 2: The specific sub-themes for each pillar.
-      IMPORTANT: For every node, provide a brief 'explanation' field (1 sentence) that explains the strategic significance of this pillar.
-    `;
-  }
+  const instructionContext = problemType === 'formulaic' 
+    ? "Numerical drivers. Break down the equation. Explain every term clearly."
+    : "Strategic themes. Create distinct conceptual pillars. Define the 'so-what' for each.";
 
   const systemInstruction = `
     ${CONSULTANT_PERSONA}
-    Create a 'Logic Pyramid' for this problem. 
+    Deconstruct the challenge using a MECE Logic Pyramid. 
+    Every node MUST include an 'explanation' field that defines the concept and its impact.
+    Format: Root -> Categories -> Specific Issues.
     ${instructionContext}
-    Ensure the breakdown is clear and covers the entire scope without repeating ideas.
-    The response must be in Minto Pyramid style (Top-Down).
   `;
 
-  try {
+  return callWithRetry(async () => {
     const response = await ai.models.generateContent({
-      model: modelId,
-      contents: `Break down this challenge: "${problemStatement}"`,
+      model: MODEL_PRO,
+      contents: `Structure: "${problemStatement}"`,
       config: {
-        systemInstruction: systemInstruction,
+        systemInstruction,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -106,7 +93,7 @@ export const generateIssueTree = async (problemStatement: string, problemType: P
                 id: { type: Type.STRING },
                 label: { type: Type.STRING },
                 explanation: { type: Type.STRING },
-                type: { type: Type.STRING, enum: ['root'] },
+                type: { type: Type.STRING },
                 children: {
                   type: Type.ARRAY,
                   items: {
@@ -115,7 +102,7 @@ export const generateIssueTree = async (problemStatement: string, problemType: P
                       id: { type: Type.STRING },
                       label: { type: Type.STRING },
                       explanation: { type: Type.STRING },
-                      type: { type: Type.STRING, enum: ['category'] },
+                      type: { type: Type.STRING },
                       children: {
                         type: Type.ARRAY,
                         items: {
@@ -124,17 +111,17 @@ export const generateIssueTree = async (problemStatement: string, problemType: P
                             id: { type: Type.STRING },
                             label: { type: Type.STRING },
                             explanation: { type: Type.STRING },
-                            type: { type: Type.STRING, enum: ['issue'] },
+                            type: { type: Type.STRING }
                           },
-                          required: ['id', 'label', 'type', 'explanation']
+                          required: ['id', 'label', 'explanation']
                         }
                       }
                     },
-                    required: ['id', 'label', 'type', 'children', 'explanation']
+                    required: ['id', 'label', 'explanation', 'children']
                   }
                 }
               },
-              required: ['id', 'label', 'type', 'children', 'explanation']
+              required: ['id', 'label', 'explanation', 'children']
             },
             meceExplanation: { type: Type.STRING }
           },
@@ -142,33 +129,23 @@ export const generateIssueTree = async (problemStatement: string, problemType: P
         }
       }
     });
-
-    if (response.text) {
-      return JSON.parse(response.text) as IssueTreeResult;
-    }
-    throw new Error("No logic tree generated");
-  } catch (error) {
-    console.error("Logic Tree Failed:", error);
-    throw error;
-  }
+    return JSON.parse(response.text);
+  });
 };
 
 export const generatePrioritization = async (issues: string[]): Promise<PrioritizationResult> => {
   const systemInstruction = `
     ${CONSULTANT_PERSONA}
-    Identify the 20% of these issues that will deliver 80% of the value.
-    Sort them into:
-    - High Impact, Easy to Do (Quick Wins)
-    - High Impact, Hard to Do (Strategic Moves)
-    - Low Impact (Backlog)
+    Apply Pareto's 80/20 rule. Identify the high-impact/low-effort 'Quick Wins'.
+    Provide a concise Pareto summary justifying the selection.
   `;
 
-  try {
+  return callWithRetry(async () => {
     const response = await ai.models.generateContent({
-      model: modelId,
-      contents: `Prioritize these items: ${JSON.stringify(issues)}`,
+      model: MODEL_PRO,
+      contents: `Prioritize: ${JSON.stringify(issues)}`,
       config: {
-        systemInstruction: systemInstruction,
+        systemInstruction,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -182,11 +159,11 @@ export const generatePrioritization = async (issues: string[]): Promise<Prioriti
                   label: { type: Type.STRING },
                   impact: { type: Type.STRING, enum: ['High', 'Low'] },
                   effort: { type: Type.STRING, enum: ['High', 'Low'] },
-                  quadrant: { type: Type.STRING, enum: ['Quick Wins', 'Major Projects', 'Fill Ins', 'Thankless Tasks'] },
+                  quadrant: { type: Type.STRING },
                   reasoning: { type: Type.STRING },
                   isParetoTop20: { type: Type.BOOLEAN }
                 },
-                required: ['id', 'label', 'impact', 'effort', 'quadrant', 'reasoning', 'isParetoTop20']
+                required: ['id', 'label', 'quadrant', 'reasoning', 'isParetoTop20']
               }
             },
             paretoSummary: { type: Type.STRING }
@@ -195,34 +172,22 @@ export const generatePrioritization = async (issues: string[]): Promise<Prioriti
         }
       }
     });
-
-    if (response.text) {
-      return JSON.parse(response.text) as PrioritizationResult;
-    }
-    throw new Error("No prioritization generated");
-  } catch (error) {
-    console.error("Prioritization Failed:", error);
-    throw error;
-  }
+    return JSON.parse(response.text);
+  });
 };
 
 export const generateWorkplan = async (issues: string[]): Promise<WorkplanItem[]> => {
   const systemInstruction = `
     ${CONSULTANT_PERSONA}
-    Create a clear action plan. 
-    For each item, provide:
-    1. A clear goal (Hypothesis).
-    2. What we need to check (Analysis).
-    3. Where the info is (Source).
-    4. When it happens (Timing).
+    Create a hypothesis-driven workplan. For each item, clearly state the hypothesis we are testing.
   `;
 
-  try {
+  return callWithRetry(async () => {
     const response = await ai.models.generateContent({
-      model: modelId,
-      contents: `Plan the next steps for: ${JSON.stringify(issues)}`,
+      model: MODEL_FLASH,
+      contents: `Workplan for: ${JSON.stringify(issues)}`,
       config: {
-        systemInstruction: systemInstruction,
+        systemInstruction,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
@@ -235,48 +200,40 @@ export const generateWorkplan = async (issues: string[]): Promise<WorkplanItem[]
               source: { type: Type.STRING },
               timing: { type: Type.STRING },
             },
-            required: ['issue', 'hypothesis', 'analysis', 'source', 'timing']
+            required: ['issue', 'hypothesis', 'analysis', 'timing']
           }
         }
       }
     });
-
-    if (response.text) {
-      return JSON.parse(response.text) as WorkplanItem[];
-    }
-    throw new Error("No workplan generated");
-  } catch (error) {
-    console.error("Workplan Failed:", error);
-    throw error;
-  }
+    return JSON.parse(response.text);
+  });
 };
 
 export const generateSynthesis = async (problem: string, context: string): Promise<SynthesisResult> => {
   const systemInstruction = `
     ${CONSULTANT_PERSONA}
-    Lead with the Answer. 
-    Provide a clear, integrated recommendation first.
-    Then list the specific steps, who is involved, and what's needed.
+    SYNTHESIZE THE ANSWER FIRST. Provide one clear, actionable recommendation.
+    Be decisive.
   `;
 
-  try {
+  return callWithRetry(async () => {
     const response = await ai.models.generateContent({
-      model: modelId,
-      contents: `Challenge: ${problem}. Context: ${context}. Give me the final recommendation.`,
+      model: MODEL_PRO,
+      contents: `Synthesize: "${problem}". Context: ${context}`,
       config: {
-        systemInstruction: systemInstruction,
+        systemInstruction,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            synthesis: { type: Type.STRING, description: "The integrated summary insight." },
+            synthesis: { type: Type.STRING },
             recommendation: {
               type: Type.OBJECT,
               properties: {
-                text: { type: Type.STRING, description: "The core recommendation statement." },
+                text: { type: Type.STRING },
                 actionableSteps: { type: Type.ARRAY, items: { type: Type.STRING } },
-                stakeholders: { type: Type.ARRAY, items: { xType: Type.STRING }, description: "Who needs to buy in." },
-                resources: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Budget or tech needed." }
+                stakeholders: { type: Type.ARRAY, items: { type: Type.STRING } },
+                resources: { type: Type.ARRAY, items: { type: Type.STRING } }
               },
               required: ['text', 'actionableSteps', 'stakeholders', 'resources']
             }
@@ -285,13 +242,6 @@ export const generateSynthesis = async (problem: string, context: string): Promi
         }
       }
     });
-
-    if (response.text) {
-      return JSON.parse(response.text) as SynthesisResult;
-    }
-    throw new Error("No synthesis generated");
-  } catch (error) {
-    console.error("Synthesis Failed:", error);
-    throw error;
-  }
+    return JSON.parse(response.text);
+  });
 };
